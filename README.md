@@ -2,7 +2,7 @@
 
 ### License
 
-See LICENSE
+See [LICENSE](LICENSE). This is a Python 3 port of [`x56/airpyrt-tools`](https://github.com/x56/airpyrt-tools) by Vince Cali, distributed under the same MIT License.
 
 
 ### Requirements
