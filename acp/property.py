@@ -574,7 +574,7 @@ class ACPProperty(object):
 	
 	def __init__(self, name=None, value=None):
 		# handle "null" property packed name and value first
-		if name == "\x00\x00\x00\x00" and value == "\x00\x00\x00\x00":
+		if name == "\x00\x00\x00\x00" and value == b"\x00\x00\x00\x00":
 			name = None
 			value = None
 		
@@ -606,9 +606,9 @@ class ACPProperty(object):
 	def _init_dec(self, value):
 		if   type(value) == int:
 			return value
-		elif type(value) == str:
+		elif isinstance(value, (bytes, bytearray)):
 			try:
-				return struct.unpack("!I", value)[0]
+				return struct.unpack("!I", bytes(value))[0]
 			except:
 				raise ACPPropertyInitValueError("invalid packed binary string")
 		else:
@@ -617,54 +617,54 @@ class ACPProperty(object):
 	def _init_hex(self, value):
 		if   type(value) == int:
 			return value
-		elif type(value) == str:
+		elif isinstance(value, (bytes, bytearray)):
 			try:
-				return struct.unpack("!I", value)[0]
+				return struct.unpack("!I", bytes(value))[0]
 			except:
 				raise ACPPropertyInitValueError("invalid packed binary string")
 		else:
 			raise ACPPropertyInitValueError("invalid built-in type")
 	
 	def _init_mac(self, value):
-		if type(value) == str:
-			# first, try as packed binary value
+		if isinstance(value, (bytes, bytearray)):
 			if len(value) == 6:
-				return value
-			# second, attempt to unpack colon delimited value
+				return bytes(value)
+			raise ACPPropertyInitValueError("invalid value")
+		if isinstance(value, str):
+			# attempt to unpack colon delimited value
 			mac_bytes = value.split(":")
 			if len(mac_bytes) == 6:
 				try:
-					return "".join(mac_bytes).decode("hex")
-				except TypeError:
+					return bytes.fromhex("".join(mac_bytes))
+				except ValueError:
 					raise ACPPropertyInitValueError("non-hex digit in value")
-			# fallthrough
 			raise ACPPropertyInitValueError("invalid value")
-		else:
-			raise ACPPropertyInitValueError("invalid built-in type")
+		raise ACPPropertyInitValueError("invalid built-in type")
 	
 	def _init_bin(self, value):
-		if type(value) == str:
-			return value
+		if isinstance(value, (bytes, bytearray)):
+			return bytes(value)
 		else:
 			raise ACPPropertyInitValueError("invalid built-in type")
 	
 	def _init_cfb(self, value):
-		if type(value) == str:
-			return value
+		if isinstance(value, (bytes, bytearray)):
+			return bytes(value)
 		else:
 			raise ACPPropertyInitValueError("invalid built-in type")
 	
 	def _init_log(self, value):
-		if type(value) == str:
-			return value
+		if isinstance(value, (bytes, bytearray)):
+			return bytes(value)
 		else:
 			raise ACPPropertyInitValueError("invalid built-in type")
 	
 	def _init_str(self, value):
-		if type(value) == str:
-			return value
-		else:
-			raise ACPPropertyInitValueError("invalid built-in type")
+		if isinstance(value, str):
+			return value.encode("utf-8")
+		if isinstance(value, (bytes, bytearray)):
+			return bytes(value)
+		raise ACPPropertyInitValueError("invalid built-in type")
 	
 	
 	def __repr__(self):
@@ -690,25 +690,22 @@ class ACPProperty(object):
 		return hex(value)
 	
 	def _format_mac(self, value):
-		mac_bytes = []
-		for i in range(6):
-			mac_bytes.append(value[i].encode("hex"))
-		return "{0}:{1}:{2}:{3}:{4}:{5}".format(*mac_bytes)
+		return ":".join("{0:02x}".format(value[i]) for i in range(6))
 	
 	def _format_bin(self, value):
-		return value.encode("hex")
+		return value.hex()
 	
 	def _format_cfb(self, value):
 		return pprint.pformat(CFLBinaryPListParser.parse(value))
 	
 	def _format_log(self, value):
 		s = ""
-		for line in value.strip("\x00").split("\x00"):
-			s += "{0}\n".format(line)
+		for line in value.strip(b"\x00").split(b"\x00"):
+			s += "{0}\n".format(line.decode("utf-8", "replace"))
 		return s
 	
 	def _format_str(self, value):
-		return value
+		return value.decode("utf-8", "replace")
 	
 	
 	@classmethod
@@ -744,9 +741,10 @@ class ACPProperty(object):
 	@classmethod
 	def parse_raw_element_header(cls, data):
 		try:
-			return cls._element_header_format.unpack(data)
+			name, flags, size = cls._element_header_format.unpack(data)
 		except struct.error:
 			raise ACPPropertyError("failed to parse property element header")
+		return name.decode("ascii"), flags, size
 	
 	
 	@classmethod
@@ -754,12 +752,13 @@ class ACPProperty(object):
 		#TODO: handle flags!???
 		#XXX: handles "null" name or value first, but this is currently garbage
 		name = property.name if property.name is not None else "\x00\x00\x00\x00"
-		value = property.value if property.value is not None else "\x00\x00\x00\x00"
+		value = property.value if property.value is not None else b"\x00\x00\x00\x00"
 		if   type(value) == int:
 			st = struct.Struct(">I")
 			#XXX: this could throw an exception, we need to range check int/hex values to ensure they pack into 32 bits still
 			return cls.compose_raw_element_header(name, flags, st.size) + st.pack(value)
-		elif type(value) == str:
+		elif isinstance(value, (bytes, bytearray)):
+			value = bytes(value)
 			return cls.compose_raw_element_header(name, flags, len(value)) + value
 		else:
 			raise ACPPropertyError("unhandled property type for raw element composition")
@@ -767,6 +766,8 @@ class ACPProperty(object):
 	
 	@classmethod
 	def compose_raw_element_header(cls, name, flags, size):
+		if isinstance(name, str):
+			name = name.encode("ascii")
 		try:
 			return cls._element_header_format.pack(name, flags, size)
 		except struct.error:
