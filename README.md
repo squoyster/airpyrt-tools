@@ -7,18 +7,21 @@ See LICENSE
 
 ### Requirements
 
-- python 2.7
-- pycrypto
+- python 3.8+
+- pycryptodome
 
 
 ### Installation
 
-`python setup.py install [--user]`
+```
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
 
 
 ### Usage
 
-`python [-B] -m acp`
+`python -m acp` (or `acp` once installed)
 
     usage: __main__.py [-h] [-t address] [-p password] [--listprop]
                        [--helpprop property] [--getprop property]
@@ -80,6 +83,11 @@ this indefinitely making incremental improvements (and probably never releasing 
 latter made far more sense.
 
 Return value of 0xfffffff6 when using --getprop means the property is not avaliable/readable
+
+
+### Testing
+
+`.venv/bin/python -m pytest`
 
 
 ## TODO (very incomplete list in no particular order)
